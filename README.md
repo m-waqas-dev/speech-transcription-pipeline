@@ -2,6 +2,21 @@
 
 A Python CLI that accepts an audio file, transcribes speech, returns timestamps per segment, and prepares deterministic text features for downstream use. Part 1 is implemented. The distributed service described below is a design proposal for Part 2, not an implemented API.
 
+## Pipeline diagram
+
+This flowchart shows the implemented CLI. Open this README on GitHub, or in a Markdown preview that supports Mermaid, to see the rendered diagram.
+
+```mermaid
+flowchart TD
+    A["Audio file<br/>WAV / MP3"] --> B["Validate and normalize<br/>ffprobe + FFmpeg<br/>16 kHz mono PCM on temporary disk"]
+    B --> C["Read bounded chunks<br/>300 seconds by default"]
+    C --> D["Transcribe each chunk<br/>faster-whisper + voice activity detection<br/>Reuse one loaded model"]
+    D --> E["Attach global timestamps<br/>Chunk sample offset + local segment time<br/>Cap estimated ends at the chunk duration"]
+    E --> F["Process and save JSON<br/>Preserve raw text; derive cleaned text and keywords<br/>Publish the complete result atomically"]
+```
+
+Audio moves through validation, normalization, chunked recognition, timestamp conversion, and deterministic post-processing. The output contains the transcript and timestamped segments. The proposed API, queue, and cloud storage are described separately in Part 2 below.
+
 ## Quick start
 
 Use Python 3.10+ and install FFmpeg, including `ffprobe`, through your operating system's package manager. Both commands must be on `PATH`.
@@ -29,17 +44,6 @@ python -m unittest -v test_pipeline.py
 ```
 
 ## Implementation
-
-```text
-Local audio
-  -> validate path and byte size
-  -> inspect the first audio stream with ffprobe
-  -> decode to 16 kHz mono 16-bit PCM WAV on temporary disk
-  -> read bounded chunks, reuse one speech model
-  -> add sample-derived offsets to ASR segment timestamps
-  -> preserve raw text; derive cleaned text and keyword matches
-  -> atomically publish a versioned JSON result
-```
 
 `pipeline.py` contains these stages as separate functions. `run_pipeline` coordinates them, while `main` handles arguments and structured errors. Tests inject a recognizer so failures and edge cases can be checked deterministically without a network download.
 
