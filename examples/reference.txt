@@ -1,0 +1,5 @@
+Synthetic speech reference:
+Hello. This is a test of the transcription pipeline. Please send the project update tomorrow.
+
+The WAV and MP3 examples encode the same locally synthesized speech.
+The transcript JSON files contain observed tiny.en model output, not manually corrected text.

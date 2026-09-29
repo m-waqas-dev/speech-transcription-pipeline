@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+transcript.json
+.model-cache/
+mock.json
+wav-result.json
+mp3-result.json

@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "status": "completed",
+  "mock": false,
+  "source": {
+    "filename": "demo.wav",
+    "sha256": "01f4d8a094e126447db4f3e0d40f2e8b09bb55b4cdd38d32796c0086f22493d7",
+    "audio_stream": {
+      "codec_name": "pcm_s16le",
+      "sample_rate": "16000",
+      "channels": 1
+    }
+  },
+  "duration_seconds": 5.767,
+  "timestamp_unit": "seconds",
+  "languages": [
+    "en"
+  ],
+  "configuration": {
+    "model": "tiny.en",
+    "device": "cpu",
+    "compute_type": "int8",
+    "chunk_seconds": 300,
+    "language": "en",
+    "sample_rate": 16000,
+    "vad_filter": true,
+    "beam_size": 5
+  },
+  "segments": [
+    {
+      "id": 0,
+      "chunk_index": 0,
+      "start": 0.0,
+      "end": 5.767,
+      "timestamp_clamped": true,
+      "text": " Hello, this is a test of the transcription pipeline. Please send the project update tomorrow."
+    }
+  ],
+  "text": "Hello, this is a test of the transcription pipeline. Please send the project update tomorrow.",
+  "cleaned_text": "Hello, this is a test of the transcription pipeline. Please send the project update tomorrow.",
+  "token_count": 15,
+  "keyword_hits": [
+    {
+      "keyword": "update",
+      "segment_id": 0,
+      "count": 1,
+      "start": 0.0,
+      "end": 5.767
+    }
+  ]
+}
