@@ -17,31 +17,200 @@ flowchart TD
 
 Audio moves through validation, normalization, chunked recognition, timestamp conversion, and deterministic post-processing. The output contains the transcript and timestamped segments. The proposed API, queue, and cloud storage are described separately in Part 2 below.
 
-## Quick start
+## Local setup and run: MacBook / VS Code
 
-Use Python 3.10+ and install FFmpeg, including `ffprobe`, through your operating system's package manager. Both commands must be on `PATH`.
+The commands below use macOS's Zsh or Bash terminal. The verified environment is Python 3.13.5 on macOS ARM64 with FFmpeg/ffprobe 9.0.2, faster-whisper 1.2.1, and PyAV 18.1.0. Python 3.11+ is required by the pinned PyAV package; dependency availability can vary by platform and Python version.
+
+### 1. Open the project and terminal
+
+If you already have the project, open its folder in VS Code using **File > Open Folder**. Open **View > Terminal** (Control + backtick on macOS). Run every command below from the folder containing `pipeline.py` and `requirements.txt`. See the [VS Code terminal guide](https://code.visualstudio.com/docs/terminal/getting-started).
+
+For a fresh checkout only, run:
+
+```sh
+git clone https://github.com/m-waqas-dev/speech-transcription-pipeline.git
+cd speech-transcription-pipeline
+```
+
+Check the prerequisites:
+
+```sh
+python3 --version
+ffmpeg -version
+ffprobe -version
+```
+
+If FFmpeg is missing and Homebrew is installed, [install FFmpeg](https://formulae.brew.sh/formula/ffmpeg) with:
+
+```sh
+brew install ffmpeg
+```
+
+This supplies both `ffmpeg` and `ffprobe`. Both must be on `PATH`.
+
+### 2. Create the environment and install dependencies
+
+Create the environment once; skip the first command if a suitable `.venv` already exists:
 
 ```sh
 python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python pipeline.py examples/demo.wav --language en --keyword update --output transcript.json
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip check
 ```
 
-On Windows, activate with `.venv\Scripts\activate` instead. A named model is downloaded on first use; subsequent runs reuse its cache. To control where models are stored, pass `--model-cache .model-cache`. To run offline after provisioning a model, use its local converted-model directory as `--model`.
-
-The default is the multilingual `base` model on CPU with INT8 computation. A larger model may improve recognition on some data at greater compute cost; choose using measurements on representative recordings. The smaller `tiny.en` is useful for an English smoke test:
+The last command should print `No broken requirements found.` To reproduce the recorded Python 3.13 macOS dependency versions, use this installation command instead:
 
 ```sh
-python pipeline.py examples/demo.mp3 --model tiny.en --language en --keyword update --output transcript.json
+.venv/bin/python -m pip install -r requirements.txt -c requirements-tested.txt
 ```
 
-Mock mode exercises decoding, chunking, serialization, and post-processing without installing an ASR model. It deliberately returns fake text, including for silent input; `mock: true` identifies it in the result.
+Every Python command uses `.venv/bin/python` explicitly, so environment activation is optional. A shell alias such as `python=/usr/local/bin/python3` can otherwise select the global installation even after activation. To confirm the interpreter and decoder version:
 
 ```sh
-python pipeline.py examples/demo.wav --mock --chunk-seconds 3 --output mock.json
-python -m unittest -v test_pipeline.py
+.venv/bin/python -c 'import sys, av; print(sys.executable); print("PyAV:", av.__version__)'
 ```
+
+The interpreter path should end in this project's `.venv/bin/python`, and PyAV should be `18.1.0`. On Windows, use `.venv\Scripts\python.exe` in place of `.venv/bin/python` and install FFmpeg through your platform's package manager; the walkthrough here was verified on macOS.
+
+### 3. Run the automated tests
+
+```sh
+.venv/bin/python -m unittest -v test_pipeline.py
+```
+
+The verified result is **16 tests passed**, ending with `OK`. These tests use injected recognizers and do not download a speech model. Five decoder integration tests require FFmpeg/ffprobe and explicitly skip when those tools are missing. `OK (skipped=5)` therefore does not mean all 16 tests ran. See [VALIDATION.md](VALIDATION.md) for the recorded checks.
+
+### 4. Run real speech transcription
+
+For the included English WAV demo on a MacBook, use CPU and INT8:
+
+```sh
+.venv/bin/python pipeline.py examples/demo.wav --model tiny.en --language en --device cpu --compute-type int8 --keyword update --output transcript.json
+```
+
+The named model downloads on first use and is cached for later runs. Wait for the terminal prompt to return. On success, the command prints:
+
+```json
+{"status": "completed", "output": "transcript.json"}
+```
+
+Then display the full result:
+
+```sh
+cat transcript.json
+```
+
+Or display only the recognized speech:
+
+```sh
+.venv/bin/python -c 'import json; print(json.load(open("transcript.json"))["text"])'
+```
+
+The verified demo transcript is:
+
+> Hello, this is a test of the transcription pipeline. Please send the project update tomorrow.
+
+The JSON also contains `mock: false`, duration `5.767`, timestamped segments, and an `update` keyword hit. Open `transcript.json` from VS Code's Explorer to view the same result in the editor. Only inspect it after a successful run: a failed run preserves any previous output file.
+
+### 5. Run MP3 or your own recording
+
+Run the included MP3 and save it separately:
+
+```sh
+.venv/bin/python pipeline.py examples/demo.mp3 --model tiny.en --language en --device cpu --compute-type int8 --keyword update --output mp3-result.json
+cat mp3-result.json
+```
+
+For your own English recording, replace the quoted input path with a real file. Quotes are needed when the path contains spaces:
+
+```sh
+.venv/bin/python pipeline.py "/path/to/my recording.wav" --model tiny.en --language en --device cpu --compute-type int8 --keyword update --keyword project --output transcript.json
+```
+
+For other languages, use a multilingual model such as `base` and set the language code, or omit `--language` for detection:
+
+```sh
+.venv/bin/python pipeline.py "/path/to/my recording.mp3" --model base --device cpu --compute-type int8 --output transcript.json
+```
+
+`base` is the default model. The documented real-model smoke tests use `tiny.en`; `base` was not benchmarked. Larger models may improve recognition on some recordings at greater compute cost.
+
+### 6. Exercise the pipeline without a speech model
+
+```sh
+.venv/bin/python pipeline.py examples/demo.wav --mock --chunk-seconds 3 --output mock.json
+cat mock.json
+```
+
+This checks decoding, multiple chunks, timestamps, processing, and JSON output without a model download. It deliberately returns `Mock transcription.`, including for silent input, and labels the result `mock: true`. Use the real command in step 4 when demonstrating speech recognition.
+
+### 7. Commands for subsequent runs or a video demo
+
+Once setup is complete, open the project terminal and run these one at a time. Continue to the next command after checking the previous result:
+
+```sh
+.venv/bin/python -m unittest -v test_pipeline.py
+.venv/bin/python pipeline.py examples/demo.wav --model tiny.en --language en --device cpu --compute-type int8 --keyword update --output transcript.json
+cat transcript.json
+```
+
+For a brief walkthrough, show the README diagram, the test result ending in `OK`, the transcription completion message, and the transcript text with its timestamps and keyword hit. Run the model once before recording to finish the initial download.
+
+## Command-line reference
+
+```sh
+.venv/bin/python pipeline.py --help
+```
+
+| Argument | Default | Purpose |
+| --- | --- | --- |
+| `audio` | Required | Local input audio path. |
+| `--output` | `transcript.json` | JSON destination; replaced only after the whole run succeeds. |
+| `--model` | `base` | Whisper model name or local converted-model directory; `tiny.en` is the English demo model. |
+| `--language` | Auto-detect per chunk | Language code such as `en`. |
+| `--device` | `cpu` | `cpu` or `cuda`; use `cpu` on a MacBook. CUDA requires a compatible NVIDIA setup. |
+| `--compute-type` | `int8` | Backend compute type; the verified Mac demo uses `int8`. |
+| `--keyword` | None | Keyword to match; repeat the flag for multiple keywords. |
+| `--chunk-seconds` | `300` | Chunk duration from 1 to 900 seconds. |
+| `--max-seconds` | `7200` | Input duration limit from 1 to 7200 seconds. |
+| `--max-bytes` | `262144000` | Positive maximum input size in bytes (250 MiB by default). |
+| `--model-cache` | Backend default cache | Directory for downloaded models. |
+| `--mock` | Off | Return labeled fake text without loading a speech model. |
+| `-h`, `--help` | — | Display available arguments. |
+
+To choose a project-local model cache:
+
+```sh
+.venv/bin/python pipeline.py examples/demo.wav --model tiny.en --language en --device cpu --compute-type int8 --model-cache .model-cache --output transcript.json
+```
+
+For offline use after provisioning a model, pass the actual converted-model directory containing `model.bin` and its companion files. Replace this example path; a cache's top-level directory is not itself the model directory:
+
+```sh
+.venv/bin/python pipeline.py examples/demo.wav --model "/path/to/converted-model" --language en --device cpu --compute-type int8 --output transcript.json
+```
+
+## Troubleshooting local runs
+
+| Symptom | What to do |
+| --- | --- |
+| `python: command not found`, or the wrong package versions load | Use `.venv/bin/python` for both installation and execution. |
+| `.venv/bin/python: no such file or directory` | Open the project folder, then complete environment setup in step 2. |
+| Missing faster-whisper or another Python package | Run `.venv/bin/python -m pip install -r requirements.txt`. |
+| Missing `ffmpeg` / `ffprobe`, or `dependency_missing` | Install FFmpeg, then verify both version commands in step 1. |
+| `transcription_failed` with faster-whisper 1.2.1 and PyAV 19 | PyAV 19 removed an option this faster-whisper version uses. Reinstall the pinned requirements and run with the project's interpreter; see the command below. Other causes can produce this error too. |
+| Hugging Face unauthenticated-request warning | This warning alone is not a failure. The public demo model ran successfully without a token; authentication can help with download rate limits. |
+| `model_load_failed` | Check the first-download network connection and model name, or verify the local converted-model directory. |
+| Input file missing or invalid | Check the path and quote it if it contains spaces. Confirm it is a non-empty, decodable audio file. |
+
+Repair dependencies and verify their consistency:
+
+```sh
+.venv/bin/python -m pip install -r requirements.txt -c requirements-tested.txt
+.venv/bin/python -m pip check
+```
+
+Then rerun the real WAV command in step 4. The project pins PyAV to `18.1.0` to avoid the reproduced `metadata_errors` incompatibility. For the recorded failure and successful recheck, see [VALIDATION.md](VALIDATION.md).
 
 ## Implementation
 
@@ -140,7 +309,7 @@ Small-file multipart input is an optional alternative. Validate request schemas 
 
 ## Validation and tradeoffs
 
-Run `python -m unittest -v test_pipeline.py`. Tests cover sample offsets and final chunks, timestamp validation, lazy failures, no-speech results, raw-text preservation, keyword matching, atomic output, file/byte limits, source overwrite protection, decoder timeouts, real WAV/MP3 decoding, stereo resampling, corrupt input, duration limits, and no partial publication after inference failure. Decoder tests skip explicitly if FFmpeg tools are unavailable.
+Run `.venv/bin/python -m unittest -v test_pipeline.py`. Tests cover sample offsets and final chunks, timestamp validation, lazy failures, no-speech results, raw-text preservation, keyword matching, atomic output, file/byte limits, source overwrite protection, decoder timeouts, real WAV/MP3 decoding, stereo resampling, corrupt input, duration limits, and no partial publication after inference failure. Decoder tests skip explicitly if FFmpeg tools are unavailable.
 
 See `VALIDATION.md` for the actual test run and real-model smoke-test results. Mock tests validate pipeline behavior, not recognition accuracy. A smoke test on synthetic speech is not an accuracy benchmark. Before production, measure word error rate against human-reviewed reference transcripts, timestamp error, latency, real-time factor, peak memory, and failure rate across target languages, accents, silence, noise, and long recordings. Include speech crossing chunk boundaries. No model or implementation can promise perfect transcription for arbitrary audio.
 
@@ -148,7 +317,7 @@ See `VALIDATION.md` for the actual test run and real-model smoke-test results. M
 
 - `pipeline.py`: runnable implementation.
 - `test_pipeline.py`: deterministic contracts and real decoder tests.
-- `requirements.txt`: pinned ASR dependency; `requirements-tested.txt` records the tested environment.
+- `requirements.txt`: pinned ASR and compatible audio decoder dependencies; `requirements-tested.txt` records the tested environment.
 - `examples/`: synthetic example audio and actual example output.
 - `VALIDATION.md`: what was actually verified.
 

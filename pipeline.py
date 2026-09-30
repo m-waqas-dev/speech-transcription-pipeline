@@ -19,10 +19,25 @@ import wave
 SAMPLE_RATE = 16_000
 
 
+# Supporting types.
+
+
 class PipelineError(Exception):
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code = code
+
+
+class MockModel:
+    """Deterministic plumbing demo only; it does not recognize speech."""
+    def transcribe(self, path: str, **options):
+        with wave.open(path, "rb") as audio:
+            duration = audio.getnframes() / audio.getframerate()
+        segment = SimpleNamespace(start=0.0, end=duration, text="Mock transcription.")
+        return iter([segment]), SimpleNamespace(language=options.get("language") or "en")
+
+
+# Audio preparation, recognition, and result helpers.
 
 
 def run_media(command: list[str], timeout: int) -> str:
@@ -100,15 +115,6 @@ def audio_chunks(normalized: Path, directory: Path, chunk_seconds: float):
             yield path, consumed / SAMPLE_RATE, frames / SAMPLE_RATE
             consumed += frames
             path.unlink(missing_ok=True)
-
-
-class MockModel:
-    """Deterministic plumbing demo only; it does not recognize speech."""
-    def transcribe(self, path: str, **options):
-        with wave.open(path, "rb") as audio:
-            duration = audio.getnframes() / audio.getframerate()
-        segment = SimpleNamespace(start=0.0, end=duration, text="Mock transcription.")
-        return iter([segment]), SimpleNamespace(language=options.get("language") or "en")
 
 
 def create_model(name: str, device: str, compute_type: str, mock: bool, cache: str | None):
@@ -190,6 +196,9 @@ def atomic_json(path: Path, result: dict) -> None:
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
+
+
+# Pipeline orchestration and command-line entry points.
 
 
 def run_pipeline(args, model=None) -> dict:
